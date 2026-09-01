@@ -1,5 +1,6 @@
 import os, sys
 import shutil, readline
+import argparse
 from pathlib import Path
 from pathvalidate import is_valid_filename as ivf
 from prompt_toolkit import prompt
@@ -84,9 +85,22 @@ def saveFile(file, contents):
 def edit(file):
     global curDir
     global files
+    global args
     contents = {}
     curFile = file
     sideScroll = 0
+
+    ## Configuration
+    contentBorderLength = 12
+    defaultStartDisplayLine = 0
+    contentDisplayHeight = 25
+    permissionMode = 1
+
+    ## Setup
+    startDisplayLine = defaultStartDisplayLine
+    if args.read:
+        permissionMode = 0
+
     if curFile != '':
         try: 
             with open(curFile, 'r') as r:
@@ -105,9 +119,10 @@ def edit(file):
 
     while True:
         tcolumns = max(1, shutil.get_terminal_size().columns)
+        ## Edit Menu
+
         clear()
         print(terminal_clip(f"Editing File: {curFile}", tcolumns))
-        contentBorderLength = 12
         if len(contents.keys()) != 0:
             if max([len(x) for x in contents.values()]) > 12 or len(curFile)+14 > 12:
                 if max([len(x) for x in contents.values()]) < len(curFile)+14:
@@ -118,7 +133,13 @@ def edit(file):
             print(terminal_clip(visibleBorder, tcolumns))
         else:
             print("____________\n(Empty File)")
+        dc = 0 - startDisplayLine
         for l in contents.keys():
+            dc += 1
+            if l < startDisplayLine:
+                continue
+            if dc > contentDisplayHeight:
+                break
             visibleLine = contents[l][sideScroll:sideScroll + tcolumns]
             print(terminal_clip(f"{"".join([" " for x in range(len(str(max(contents.keys()))) - len(str(l))) ])}{l}|" + visibleLine, tcolumns))
         borderPrompt = terminal_clip("".join(["_" for c in range(contentBorderLength)])[sideScroll:sideScroll + tcolumns], tcolumns)
@@ -130,6 +151,12 @@ def edit(file):
             continue
         if editorCommand.split()[0][0] == '<' and set(editorCommand.split()[0]).issubset("<<<<<"):
             sideScroll = max(0, sideScroll - (2 ** len(editorCommand.split()[0]) + 2))
+            continue
+        if editorCommand.split()[0][0] == 'u' and set(editorCommand.split()[0]).issubset("uuuuu"):
+            startDisplayLine = min((len(contents)//2)*2, startDisplayLine + (2 ** len(editorCommand.split()[0])))
+            continue
+        if editorCommand.split()[0][0] == 'j' and set(editorCommand.split()[0]).issubset("jjjjj"):
+            startDisplayLine = max(0, startDisplayLine - (2 ** len(editorCommand.split()[0])))
             continue
         if editorCommand.split()[0][0] == 'H':
             input("""
@@ -181,121 +208,170 @@ Press Enter to Leave""")
                 if input(">>Do you want to exit? Make sure you've saved your files (Type 'y' for yes)") == "y":
                     break
         elif editorCommand.split()[0] == "I":
-            if tags(editorCommand).issubset(['l']) and len(tags(editorCommand)) != 0:
+            if permissionMode == 1:
+                if tags(editorCommand).issubset(['l']) and len(tags(editorCommand)) != 0:
+                    try:
+                        editLineNum = editorCommand.split()[2]
+                    except:
+                        editLineNum = len(contents.keys())
+                else:
+                    editLineNum = input(">>Line Number: ")
                 try:
-                    editLineNum = editorCommand.split()[2]
-                except:
+                    editContent = input(">>Content:\n" + "".join([" " for x in range(len(str(max(contents.keys()))))]) + "|")
+                except: editContent = input(">>Content:\n" + " |")
+                editContent = editContent.expandtabs(4)
+                if editLineNum == '':
                     editLineNum = len(contents.keys())
-            else:
-                editLineNum = input(">>Line Number: ")
-            try:
-                editContent = input(">>Content:\n" + "".join([" " for x in range(len(str(max(contents.keys()))))]) + "|")
-            except: editContent = input(">>Content:\n" + " |")
-            editContent = editContent.expandtabs(4)
-            if editLineNum == '':
-                editLineNum = len(contents.keys())
-            ld = list(contents.values())
-            ld.insert(int(editLineNum), editContent)
-            contents = {}
-            for i, c in enumerate(ld):
-                contents[i] = c
-        elif editorCommand.split()[0] == "D":
-            if tags(editorCommand).issuperset("l"):
-                if len(editorCommand.split()) < 3:
-                    delLineNum = "undef"
-                else:
-                    delLineNum = editorCommand.split()[2]
-            else:
-                delLineNum = input(">>Delete Line: ")
-            try:
-                delLineNum = int(delLineNum)
-            except:
-                delLineNum = "undef"
-            ld = list(contents.values())
-            try:
-                if delLineNum == "undef":
-                    ld.pop()
-                else:
-                    ld.pop(delLineNum)
-            except:
-                pass
-            contents = {}
-            for i, c in enumerate(ld):
-                contents[i] = c
-        elif editorCommand.split()[0] == "C":
-            if len(editorCommand.split()) > 2 and tags(editorCommand).issuperset('l'):
-                changeLineNum = editorCommand.split()[2]
-            elif tags(editorCommand).issuperset('l'):
-                changeLineNum = ''
-            else:
-                changeLineNum = input(">>Change Line: ")
-            if changeLineNum == '':
-                try:
-                    changeLineNum = list(contents.keys())[len(contents.keys())-1]
-                except:
-                    changeLineNum = 0
-            try:
-                changeLineNum = int(changeLineNum)
-                list(contents.keys())[changeLineNum]
-                if tags(editorCommand).issuperset("w"):
-                    changeLineContent = input(">>Content:\n" + "".join([" " for x in range(len(str(max(contents.keys()))))]) + "|")
-                else:
-                    changeLineContent = prompt(">>Content:\n" + "".join([" " for x in range(len(str(max(contents.keys()))))]) + "|", default=contents[changeLineNum])
-                contents[changeLineNum] = changeLineContent.expandtabs(4)
-            except:
-                pass
-        elif editorCommand.split()[0] == "W":
-            if tags(editorCommand).issuperset("x"):
-                saveFile(curFile, contents.values())
-            else:
-                if input(">> Overwrite File? Type 'y' to overwrite: ") == 'y':
-                    if not Path(curFile).exists():
-                        newCurName = input(">> New File Name: ")
-                        if newCurName != "":
-                            if ivf(newCurName):
-                                curFile = newCurName
-                            else:
-                                input("Invalid File Name")
-                    saveFile(curFile, contents.values())
-        elif editorCommand.split()[0] == "X":
-            confirm = "YES"
-            if "x" not in tags(editorCommand):
-                confirm = input(">>Wipe contents of this file? Type 'YES' to confirm: ")
-                if confirm == "YES":
-                    contents = {}
-            else:
+                ld = list(contents.values())
+                ld.insert(int(editLineNum), editContent)
                 contents = {}
-            if "s" not in tags(editorCommand):
-                saveFile(curFile, contents.values())
+                for i, c in enumerate(ld):
+                    contents[i] = c
+            else:
+                input("You're in read-only mode. Cannot perform file-modifying action.")
+        elif editorCommand.split()[0] == "D":
+            if permissionMode == 1:
+                if tags(editorCommand).issuperset("l"):
+                    if len(editorCommand.split()) < 3:
+                        delLineNum = "undef"
+                    else:
+                        delLineNum = editorCommand.split()[2]
+                else:
+                    delLineNum = input(">>Delete Line: ")
+                try:
+                    delLineNum = int(delLineNum)
+                except:
+                    delLineNum = "undef"
+                ld = list(contents.values())
+                try:
+                    if delLineNum == "undef":
+                        ld.pop()
+                    else:
+                        ld.pop(delLineNum)
+                except:
+                    pass
+                contents = {}
+                for i, c in enumerate(ld):
+                    contents[i] = c
+            else:
+                input("You're in read-only mode. Cannot perform file-modifying action.")
+        elif editorCommand.split()[0] == "C":
+            if permissionMode == 1:
+                if len(editorCommand.split()) > 2 and tags(editorCommand).issuperset('l'):
+                    changeLineNum = editorCommand.split()[2]
+                elif tags(editorCommand).issuperset('l'):
+                    changeLineNum = ''
+                else:
+                    changeLineNum = input(">>Change Line: ")
+                if changeLineNum == '':
+                    try:
+                        changeLineNum = list(contents.keys())[len(contents.keys())-1]
+                    except:
+                        changeLineNum = 0
+                try:
+                    changeLineNum = int(changeLineNum)
+                    list(contents.keys())[changeLineNum]
+                    if tags(editorCommand).issuperset("w"):
+                        changeLineContent = input(">>Content:\n" + "".join([" " for x in range(len(str(max(contents.keys()))))]) + "|")
+                    else:
+                        changeLineContent = prompt(">>Content:\n" + "".join([" " for x in range(len(str(max(contents.keys()))))]) + "|", default=contents[changeLineNum])
+                    contents[changeLineNum] = changeLineContent.expandtabs(4)
+                except:
+                    pass
+            else:
+                input("You're in read-only mode. Cannot perform file-modifying action.")
+        elif editorCommand.split()[0] == "W":
+            if permissionMode == 1:
+                if tags(editorCommand).issuperset("x"):
+                    saveFile(curFile, contents.values())
+                else:
+                    if input(">> Overwrite File? Type 'y' to overwrite: ") == 'y':
+                        if not Path(curFile).exists():
+                            newCurName = input(">> New File Name: ")
+                            if newCurName != "":
+                                if ivf(newCurName):
+                                    curFile = newCurName
+                                else:
+                                    input("Invalid File Name")
+                        saveFile(curFile, contents.values())
+            else:
+                input("You're in read-only mode. Cannot perform file-modifying action.")
+        elif editorCommand.split()[0] == "X":
+            if permissionMode == 1:
+                confirm = "YES"
+                if "x" not in tags(editorCommand):
+                    confirm = input(">>Wipe cont][p nts of this file? Type 'YES' to confirm: ")
+                    if confirm == "YES":
+                        contents = {}
+                else:
+                    contents = {}
+                if "s" not in tags(editorCommand):
+                    saveFile(curFile, contents.values())
+            else:
+                input("You're in read-only mode. Cannot perform file-modifying action.")
 
 def main():
-    # Globalising Variables
+    ## Globalising Variables
     global curDir
     global files
+    global args
 
-    # Initialising Variables
-    tuiStyle = "Minimal" 
+    ## Initialising Variables
+    #tuiStyle = "Mimal" 
     sys.stdout.write("\x1b[3g")  # Clear all existing tab stops
     readline.parse_and_bind("set editing-mode emacs")
     readline.parse_and_bind(r'"\t": "    "')
+
+    # Command Line Arguments
+    parser = argparse.ArgumentParser(description="GAVFE is a basic but useful file editor.")
+    parser.add_argument("-f", "--file",type=str, help="File Name (Path to File)")
+    parser.add_argument("-l", "--look", type=str, default='.', help="Search and Act In Directory")
+    parser.add_argument("-d", "--directory", type=str, default='.', help="Open Directory")
+    parser.add_argument("-r", "--read", action="store_true", help="Read only the file, and blocks edits.")
+    parser.add_argument("--version", action="store_true", help="Shows Editor Version")
+    args = parser.parse_args()
 
     # Styles (Editor Mode: BLLII): Minimal, AsciiInter, InterfaceQ, CoreLinear
     # Styles (Editor Mode: ATUI): Minimal, AsciiInter, InterfaceQ, OpenTUI
 
     curDir = Path.cwd()
-    version = "beta2"
+    version = "Beta 2"
+    if args.file:
+        try:
+            edit(args.file)
+            clear()
+        except:
+            input("Cant open file")
+    if args.version == True:
+        print(f"GAVFE Version: {version}")
+        sys.exit()
+    if args.look:
+        if Path(f"{args.look}").is_dir():
+            curDir = Path(args.look).resolve()
+        else:
+            input("Invalid Directory")
 
     # Main Menu Loop
     while True:
         tcolumns = max(1, shutil.get_terminal_size().columns)
         clear()
-        files = [f.name for f in curDir.iterdir() if f.is_file()]
+        try:
+            files = [f.name for f in curDir.iterdir() if f.is_file()]
+            dirs = [d.name for d in curDir.iterdir() if d.is_dir()]
+        except:
+            input("Unable to List Directory")
+            curDir = Path("~").expanduser()
+            files = [f.name for f in curDir.iterdir() if f.is_file()]
+            dirs = [d.name for d in curDir.iterdir() if d.is_dir()]
         print(terminal_clip(f"-- GAVFE (General and Versatile File Editor) {version} --", tcolumns))
         print(terminal_clip(f"Type 'H' to display command list", tcolumns))
         print(terminal_clip(f"CURRENT DIRECTORY: {curDir}", tcolumns))
         print(terminal_clip(f"EDIT FILES:", tcolumns))
         for i, file in enumerate(files):
             print(terminal_clip(f"    [{i}] -> {file}", tcolumns))
+        print(terminal_clip(f"LOOK IN DIRECTORIES:", tcolumns))
+        for i, dir in enumerate(dirs):
+            print(terminal_clip(f"    [{i}] -> {dir}", tcolumns))
         command = input(terminal_clip(">> ", tcolumns))
         if command != '':
             if command.split()[0] == "H":
@@ -361,8 +437,8 @@ def main():
                 else:
                     newPath = Path(input("Look in Directory (Directory Path): ")).expanduser()
 
-                if newPath.exists():
-                    curDir = newPath
+                if (curDir / newPath).exists():
+                    curDir = Path.resolve(curDir / newPath)
                 else:
                     input("Invalid Directory")
 
@@ -384,16 +460,5 @@ def main():
                     if input("Delete ALL contents and the file itself (HELLYES/n)") == "HELLYES":
                         os.remove(deleteFile)
                 
-
-"""        elif tuiStyle == "AsciiInter":
-            print(f\"\"\"
-_                                               {''.join([' ' for x in range(len(version))])}     _
-│╔══════════════════════════════════════════════{''.join(['═' for x in range(len(version))])}════╗│
-│║ -- GAVFE (General and Versatile File Editor) {version} -- ║│
-│╚══════════════════════════════════════════════{''.join(['═' for x in range(len(version))])}════╝│
-¯   │                                           {''.join([' ' for x in range(len(version))])}     ¯
-    └─> Type 'H' to display command list\"\"\")
-            input()"""
-
 if __name__ == "__main__":
     main()
