@@ -1,4 +1,4 @@
-# PyGAVFE General and Versatile File Editor
+# PyGAVFE General and Versatile File Editor (Version Beta 2)
 
 ## Description
 GAVFE or the "General and Versatile File Editor" is a command-line or terminal file editor that aims
@@ -17,3 +17,13 @@ GAVFE *currently* supports the following file types:
 
 Future file support:
   * Bytecode files (eg. .bin and via builtin hex editor)
+
+## Editor Tools & Capabilities
+GAVFE *currently* features these tools and capabilities:
+  * BLLE (Basic Line List Editor)
+  * Scrolling Though Text Files
+
+Future Tools & Capabilities:
+  * Hex Editor
+  * Basic IDE
+  * Syntax Highlighting
