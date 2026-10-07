@@ -1,5 +1,4 @@
 # PyGAVFE General and Versatile File Editor (Version Beta 2)
-
 ## Description
 GAVFE or the "General and Versatile File Editor" is a command-line or terminal file editor that aims
 to provide as an editor for many file types. It was started by me around July of 2026 because I was bored
